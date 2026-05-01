@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # 주차장 데이터 수집기
 
 GitHub Actions로 30분마다 공공데이터포털 API를 호출해서 `data/parking.csv`에 누적 저장.
@@ -50,3 +51,7 @@ python scripts/collect.py
 ├── data/parking.csv                # 누적 데이터 (자동 생성)
 └── README.md
 ```
+=======
+# collect_parking_data
+광안리 공영주차장 실시간 데이터 수집
+>>>>>>> 3202c27b40f921e343d1dfde72509dd5fac97e2f
