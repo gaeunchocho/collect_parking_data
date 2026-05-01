@@ -38,7 +38,7 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add data/parking.csv
+          git add -f data/parking.csv
           # 변경사항 있을 때만 커밋 (실패해도 무시)
           git diff --staged --quiet || git commit -m "data: $(date -u +'%Y-%m-%d %H:%M UTC')"
           git push
