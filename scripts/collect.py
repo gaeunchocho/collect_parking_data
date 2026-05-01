@@ -1,7 +1,7 @@
 """
-공공데이터포털 주차장 데이터 수집 스크립트
-- XML 응답을 파싱해서 하나의 CSV에 누적
-- 30분마다 GitHub Actions가 실행
+부산시설공단 공영주차장 실시간 주차현황 수집 스크립트
+- GitHub Actions가 30분마다 실행
+- 전체 주차장 데이터를 하나의 CSV에 누적
 """
 import csv
 import os
@@ -13,31 +13,31 @@ from pathlib import Path
 import requests
 
 # ============================================================
-# 설정 - 본인 API에 맞게 수정하세요
+# 설정
 # ============================================================
-API_URL = "https://apis.data.go.kr/여기에_본인_엔드포인트"  # TODO: 변경
+API_URL = "https://apis.data.go.kr/B552587/ParkingInfoService/getParkingInfoList"
 API_KEY = os.environ["API_KEY"]  # GitHub Secrets에서 주입됨
 
-# API 호출 파라미터 (공공데이터포털 가이드 문서 참고해서 수정)
 PARAMS = {
     "serviceKey": API_KEY,
+    "numOfRows": 200,  # 부산시설공단 공영주차장 전체 받기에 충분
     "pageNo": 1,
-    "numOfRows": 1000,
-    "type": "xml",
 }
-
-# CSV로 저장할 필드 (XML 태그명에 맞춰 수정)
-# 예시: 주차장명, 주차구획수, 현재주차차량수 등
-FIELDS_TO_EXTRACT = [
-    "prkplceNm",      # 주차장명 (예시)
-    "prkcmprt",       # 주차구획수
-    "curParking",     # 현재 주차 차량 수
-    "lat",            # 위도
-    "lot",            # 경도
-]
 
 CSV_PATH = Path("data/parking.csv")
 KST = timezone(timedelta(hours=9))
+
+# CSV 컬럼 (한글 헤더로 분석 시 편의성 ↑)
+CSV_COLUMNS = [
+    "수집시각",
+    "주차장코드",
+    "주차장명",
+    "총주차면",
+    "현재주차대수",
+    "잔여면수",
+    "점유율",
+    "최종업데이트",
+]
 
 
 def fetch_xml() -> str:
@@ -60,50 +60,79 @@ def parse_items(xml_text: str) -> list[dict]:
         print(f"응답 앞부분: {xml_text[:500]}", file=sys.stderr)
         sys.exit(1)
 
-    # 공공데이터포털 표준 응답: response > body > items > item
+    # 응답 코드 체크
+    result_code = root.findtext(".//resultCode")
+    if result_code and result_code != "00":
+        result_msg = root.findtext(".//resultMsg") or "알 수 없는 오류"
+        print(f"[ERROR] API 에러 응답: {result_code} - {result_msg}", file=sys.stderr)
+        sys.exit(1)
+
     items = root.findall(".//item")
     if not items:
-        # 에러 메시지일 가능성 체크
-        result_msg = root.findtext(".//resultMsg") or root.findtext(".//returnAuthMsg")
-        if result_msg:
-            print(f"[ERROR] API 에러 응답: {result_msg}", file=sys.stderr)
-            sys.exit(1)
-        print("[WARN] item이 하나도 없음", file=sys.stderr)
+        print("[WARN] item이 하나도 없음. 응답 앞부분:", file=sys.stderr)
+        print(xml_text[:500], file=sys.stderr)
         return []
 
-    rows = []
     collected_at = datetime.now(KST).strftime("%Y-%m-%d %H:%M:%S")
+    rows = []
+
     for item in items:
-        row = {"collected_at": collected_at}
-        for field in FIELDS_TO_EXTRACT:
-            row[field] = (item.findtext(field) or "").strip()
-        rows.append(row)
+        # 숫자 필드는 안전하게 변환 (None, 빈 문자열 처리)
+        try:
+            total = int((item.findtext("maxcnt") or "0").strip() or "0")
+        except ValueError:
+            total = 0
+        try:
+            cur = int((item.findtext("parkingcnt") or "0").strip() or "0")
+        except ValueError:
+            cur = 0
+        try:
+            remain = int((item.findtext("curravacnt") or "0").strip() or "0")
+        except ValueError:
+            remain = 0
+
+        # 점유율 계산
+        occupancy = round(cur / total * 100, 1) if total > 0 else 0.0
+
+        rows.append({
+            "수집시각": collected_at,
+            "주차장코드": (item.findtext("parkgcd") or "").strip(),
+            "주차장명": (item.findtext("parknm") or "").strip(),
+            "총주차면": total,
+            "현재주차대수": cur,
+            "잔여면수": remain,
+            "점유율": occupancy,
+            "최종업데이트": (item.findtext("lastupdatetime") or "").strip(),
+        })
+
     return rows
 
 
 def append_to_csv(rows: list[dict]) -> None:
     """CSV에 누적 저장. 파일 없으면 헤더부터 생성"""
     if not rows:
-        print("저장할 데이터 없음")
+        print("[INFO] 저장할 데이터 없음")
         return
 
     CSV_PATH.parent.mkdir(parents=True, exist_ok=True)
     file_exists = CSV_PATH.exists()
-    fieldnames = ["collected_at"] + FIELDS_TO_EXTRACT
 
+    # utf-8-sig: 엑셀에서 한글 안 깨지게
     with CSV_PATH.open("a", newline="", encoding="utf-8-sig") as f:
-        writer = csv.DictWriter(f, fieldnames=fieldnames)
+        writer = csv.DictWriter(f, fieldnames=CSV_COLUMNS)
         if not file_exists:
             writer.writeheader()
         writer.writerows(rows)
 
-    print(f"[OK] {len(rows)}개 행 추가됨 → {CSV_PATH}")
+    print(f"[OK] {len(rows)}개 주차장 데이터 추가됨 → {CSV_PATH}")
 
 
 def main():
+    print(f"[START] 수집 시작 - {datetime.now(KST).strftime('%Y-%m-%d %H:%M:%S')} KST")
     xml_text = fetch_xml()
     rows = parse_items(xml_text)
     append_to_csv(rows)
+    print("[END] 수집 완료")
 
 
 if __name__ == "__main__":

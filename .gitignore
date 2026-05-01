@@ -1,0 +1,3 @@
+data/parking.csv
+__pycache__/
+*.pyc
