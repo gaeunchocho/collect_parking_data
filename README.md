@@ -3,8 +3,6 @@
 
 GitHub Actions로 30분마다 공공데이터포털 API를 호출해서 `data/parking.csv`에 누적 저장.
 
-## 셋업 (5분이면 끝)
-
 ### 1. 새 레포 생성
 
 ### 2. API 키를 Secrets에 등록
