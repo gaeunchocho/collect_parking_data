@@ -6,7 +6,6 @@ GitHub Actions로 30분마다 공공데이터포털 API를 호출해서 `data/pa
 ## 셋업 (5분이면 끝)
 
 ### 1. 새 레포 생성
-GitHub에 프라이빗/퍼블릭 레포 만들고 이 파일들 그대로 올리기.
 
 ### 2. API 키를 Secrets에 등록
 레포 페이지 → `Settings` → `Secrets and variables` → `Actions` → `New repository secret`
