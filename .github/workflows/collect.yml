@@ -3,7 +3,7 @@ name: Collect Parking Data
 on:
   schedule:
     # UTC 기준 30분마다 실행 (한국시간 무관, 30분 간격이라 OK)
-    - cron: '*/30 * * * *'
+    - cron: '*/15 * * * *'
   workflow_dispatch:  # 수동 실행 버튼도 추가
 
 # 동시 실행 방지: 이전 실행이 안 끝났으면 큐에 안 쌓고 그냥 스킵

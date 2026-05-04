@@ -41,14 +41,26 @@ CSV_COLUMNS = [
 
 
 def fetch_xml() -> str:
-    """API 호출해서 XML 텍스트 받아오기"""
-    try:
-        resp = requests.get(API_URL, params=PARAMS, timeout=30)
-        resp.raise_for_status()
-        return resp.text
-    except requests.RequestException as e:
-        print(f"[ERROR] API 호출 실패: {e}", file=sys.stderr)
-        sys.exit(1)
+    """API 호출해서 XML 텍스트 받아오기 (실패 시 최대 3번 재시도)"""
+    import time
+
+    max_retries = 3
+    timeout = 60  # 30 → 60초로 늘림 (공공데이터포털이 느릴 때 대비)
+
+    for attempt in range(1, max_retries + 1):
+        try:
+            resp = requests.get(API_URL, params=PARAMS, timeout=timeout)
+            resp.raise_for_status()
+            return resp.text
+        except requests.RequestException as e:
+            print(f"[WARN] 시도 {attempt}/{max_retries} 실패: {e}", file=sys.stderr)
+            if attempt < max_retries:
+                wait = 10 * attempt  # 10초, 20초씩 대기
+                print(f"[INFO] {wait}초 후 재시도...", file=sys.stderr)
+                time.sleep(wait)
+            else:
+                print(f"[ERROR] {max_retries}번 모두 실패. 종료.", file=sys.stderr)
+                sys.exit(1)
 
 
 def parse_items(xml_text: str) -> list[dict]:
